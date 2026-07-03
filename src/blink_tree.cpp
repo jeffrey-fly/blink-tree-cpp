@@ -9,28 +9,15 @@ static std::atomic<uint64_t> g_next_node_id{0};
 static std::map<NodeId, BLinkNodePtr> g_node_store; 
 static NodeId g_root_id = NULL_NODE;
 
-NodeId GetNextNodeId()
+static NodeId GetNextNodeId()
 {
     return g_next_node_id++;
-}
-
-bool BLinkTree_BuildTreeFromStorage()
-{
-    g_next_node_id = 1;
-    return true;
-}
-
-bool BLinkTree_Init(int max_keys_per_node)
-{
-    g_max_keys_per_node = (max_keys_per_node <= 0) ? 4 : max_keys_per_node;
-    BLinkTree_BuildTreeFromStorage();
-    return true;
 }
 
 /*
 * search key in the BLink tree, return node id. maybe: node itself; right link; or child node id. 
 */
-NodeId ScanNode(Key key, BLinkNode* node)
+static NodeId ScanNode(Key key, BLinkNode* node)
 {
     if(node->right_link != NULL_NODE && node->high_key.has_value() && key >= node->high_key.value())
     {
@@ -50,7 +37,7 @@ NodeId ScanNode(Key key, BLinkNode* node)
         return node->children[index];
 }
 
-size_t FindInNode(Key key, BLinkNode* node)
+static size_t FindInNode(Key key, BLinkNode* node)
 {
     auto it = std::lower_bound(node->keys.begin(), node->keys.end(), key);
     if (it != node->keys.end() && *it == key)
@@ -60,7 +47,7 @@ size_t FindInNode(Key key, BLinkNode* node)
     return static_cast<size_t>(-1); // Key not found
 }
 
-BLinkNode* GetNodeById(NodeId node_id)
+static BLinkNode* GetNodeById(NodeId node_id)
 {
     auto it = g_node_store.find(node_id);
     if (it != g_node_store.end())
@@ -68,6 +55,90 @@ BLinkNode* GetNodeById(NodeId node_id)
         return it->second.get();
     }
     return nullptr;
+}
+
+static bool IsNodeSafeToInsert(BLinkNode* node)
+{
+    return node->keys.size() < g_max_keys_per_node;
+}
+
+static bool InsertIntoLeaf(BLinkNode* node, Key key, std::optional<Value> value)
+{
+    if (!node->is_leaf)
+    {
+        return false;
+    }
+
+    auto it = std::lower_bound(node->keys.begin(), node->keys.end(), key);
+    size_t index = std::distance(node->keys.begin(), it);
+
+    if (it != node->keys.end() && *it == key)
+    {
+        return false; // Key already exists
+    }
+
+    node->keys.insert(it, key);
+    if (node->is_leaf && value.has_value())
+    {
+        node->values.insert(node->values.begin() + index, value.value());
+    }
+    return true;
+}
+
+static bool InsertIntoInternal(BLinkNode* node, Key key, NodeId child_id)
+{
+    auto it = std::lower_bound(node->keys.begin(), node->keys.end(), key);
+    size_t index = std::distance(node->keys.begin(), it);
+
+    if (it != node->keys.end() && *it == key)
+    {
+        return false; // Key already exists
+    }
+
+    node->keys.insert(it, key);
+    node->children.insert(node->children.begin() + index + 1, child_id);
+    return true;
+}
+
+static void PrintBLinkTree(BLinkNode* node, int level = 0)
+{
+    if (!node) return;
+
+    std::cout << std::string(level * 4, ' ') << "Node ID: " << node->self_id << ", Keys: ";
+    for (const auto& k : node->keys)
+    {
+        std::cout << k << " ";
+    }
+    // std::cout << ", Is Leaf: " << node->is_leaf;
+    // if (node->high_key.has_value())
+    // {
+    //     std::cout << ", High Key: " << node->high_key.value();
+    // }
+    std::cout << ", Right Link: " << node->right_link;
+    //std::cout << std::endl;
+
+    if (!node->is_leaf)
+    {
+        std::cout << ", children: " ;
+        for (const auto& child_id : node->children)
+        {
+            std::cout << child_id << " ";
+        }
+        std::cout << std::endl;
+        for (const auto& child_id : node->children)
+        {
+            BLinkNode* child_node = GetNodeById(child_id);
+            std::cout << std::endl;
+            PrintBLinkTree(child_node, level + 1);
+        }
+    }
+}
+
+bool BLinkTree_Init(int max_keys_per_node)
+{
+    g_max_keys_per_node = (max_keys_per_node <= 0) ? 4 : max_keys_per_node;
+    g_next_node_id = 1;
+    return true;
 }
 
 SearchResult BLinkTree_Search(Key _key)  
@@ -100,49 +171,6 @@ SearchResult BLinkTree_Search(Key _key)
     return result;
 }
 
-bool IsNodeSafeToInsert(BLinkNode* node)
-{
-    return node->keys.size() < g_max_keys_per_node;
-}
-
-bool InsertIntoLeaf(BLinkNode* node, Key key, std::optional<Value> value)
-{
-    if (!node->is_leaf)
-    {
-        return false;
-    }
-
-    auto it = std::lower_bound(node->keys.begin(), node->keys.end(), key);
-    size_t index = std::distance(node->keys.begin(), it);
-
-    if (it != node->keys.end() && *it == key)
-    {
-        return false; // Key already exists
-    }
-
-    node->keys.insert(it, key);
-    if (node->is_leaf && value.has_value())
-    {
-        node->values.insert(node->values.begin() + index, value.value());
-    }
-    return true;
-}
-
-bool InsertIntoInternal(BLinkNode* node, Key key, NodeId child_id)
-{
-    auto it = std::lower_bound(node->keys.begin(), node->keys.end(), key);
-    size_t index = std::distance(node->keys.begin(), it);
-
-    if (it != node->keys.end() && *it == key)
-    {
-        return false; // Key already exists
-    }
-
-    node->keys.insert(it, key);
-    node->children.insert(node->children.begin() + index + 1, child_id);
-    return true;
-}
-
 BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key)
 {
     while (ScanNode(key, current_node) == current_node->right_link)
@@ -150,40 +178,6 @@ BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key)
         current_node = GetNodeById(current_node->right_link);
     }
     return current_node;
-}
-
-void PrintBLinkTree(BLinkNode* node, int level = 0)
-{
-    if (!node) return;
-
-    std::cout << std::string(level * 4, ' ') << "Node ID: " << node->self_id << ", Keys: ";
-    for (const auto& k : node->keys)
-    {
-        std::cout << k << " ";
-    }
-    // std::cout << ", Is Leaf: " << node->is_leaf;
-    // if (node->high_key.has_value())
-    // {
-    //     std::cout << ", High Key: " << node->high_key.value();
-    // }
-    std::cout << ", Right Link: " << node->right_link;
-    //std::cout << std::endl;
-
-    if (!node->is_leaf)
-    {
-        std::cout << ", children: " ;
-        for (const auto& child_id : node->children)
-        {
-            std::cout << child_id << " ";
-        }
-        std::cout << std::endl;
-        for (const auto& child_id : node->children)
-        {
-            BLinkNode* child_node = GetNodeById(child_id);
-            std::cout << std::endl;
-            PrintBLinkTree(child_node, level + 1);
-        }
-    }
 }
 
 bool BLinkTree_Insert(Key key, Value value)

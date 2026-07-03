@@ -20,23 +20,6 @@ struct SearchResult {
     std::vector<std::pair<Key, Value>> entries; // store the key-value pairs found in the search range
 };
 
-struct FileHeader {
-    uint32_t  magic;                 
-    uint32_t  version;
-    uint32_t  block_size;
-    uint32_t* block_offset; // offset of the first block in the file
-};
-
-struct PageBLOCK {
-    uint32_t magic;                 
-    uint32_t version;
-    NodeId   block_id; 
-    bool     is_leaf;    
-    uint32_t num_keys;
-    Key*     keys;  
-    Value*   values; // if node is leaf, store pointer values; if node is internal, store child node IDs             
-};
-
 /*
  * Structure representing a node in the BLink tree.
  * represents both internal and leaf nodes, with fields for keys, children, values, and synchronization mechanisms.
