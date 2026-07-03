@@ -1,4 +1,4 @@
-#include "../include/blink_tree.hpp"
+#include "blink_tree.hpp"
 #include <algorithm>
 #include <map>
 #include <stack>
