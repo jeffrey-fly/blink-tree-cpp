@@ -50,3 +50,7 @@ target_link_libraries(blink_tree_test
   PRIVATE
     blink_tree_lib
 )
+
+target_compile_definitions(blink_tree_lib PRIVATE
+    $<$<CONFIG:Debug>:DEBUG>
+)

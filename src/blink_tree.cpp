@@ -109,22 +109,21 @@ static void PrintBLinkTree(BLinkNode* node, int level = 0)
     {
         std::cout << k << " ";
     }
-    // std::cout << ", Is Leaf: " << node->is_leaf;
-    // if (node->high_key.has_value())
-    // {
-    //     std::cout << ", High Key: " << node->high_key.value();
-    // }
+    std::cout << ", Is Leaf: " << node->is_leaf;
+    if (node->high_key.has_value())
+    {
+        std::cout << ", High Key: " << node->high_key.value();
+    }
     std::cout << ", Right Link: " << node->right_link;
-    //std::cout << std::endl;
 
     if (!node->is_leaf)
     {
-        std::cout << ", children: " ;
+        std::cout << ", children's keys: " ;
         for (const auto& child_id : node->children)
         {
             std::cout << child_id << " ";
         }
-        std::cout << std::endl;
+
         for (const auto& child_id : node->children)
         {
             BLinkNode* child_node = GetNodeById(child_id);
@@ -182,7 +181,7 @@ BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key)
 
 bool BLinkTree_Insert(Key key, Value value)
 {
-#if 1
+#ifdef DEBUG
     PrintBLinkTree(GetNodeById(g_root_id));
     std::cout << std::endl;
     std::cout << " ************ " << std::endl;   
