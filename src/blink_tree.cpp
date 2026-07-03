@@ -133,10 +133,19 @@ static void PrintBLinkTree(BLinkNode* node, int level = 0)
     }
 }
 
+void BlinkTree_Reset()
+{
+    g_next_node_id = 1;
+    g_node_store.clear();
+    g_root_id = NULL_NODE;
+}
+
 bool BLinkTree_Init(int max_keys_per_node)
 {
     g_max_keys_per_node = (max_keys_per_node <= 0) ? 4 : max_keys_per_node;
     g_next_node_id = 1;
+    g_node_store.clear();
+    g_root_id = NULL_NODE;
     return true;
 }
 
@@ -247,20 +256,16 @@ Doinsertion:
 
         if (is_leaf)
         {
-            size_t mid_index = g_max_keys_per_node / 2 + (g_max_keys_per_node % 2); // Calculate the middle index for splitting
-            for (size_t i = mid_index; i < current_node->keys.size(); ++i)
-            {
-                new_node->keys.push_back(current_node->keys[i]);
-                new_node->values.push_back(current_node->values[i]);
-            }
-            new_node->keys.push_back(key);
-            new_node->values.push_back(value);
+            InsertIntoLeaf(current_node, key, std::make_optional(value));
+            size_t mid_index = current_node->keys.size() / 2;
+            new_node->keys.assign(current_node->keys.begin() + mid_index, current_node->keys.end());
+            new_node->values.assign(current_node->values.begin() + mid_index, current_node->values.end());
+            key = current_node->keys[mid_index]; // Promote the middle key of the current node
+
             child_id = new_node->self_id;
 
             current_node->keys.resize(mid_index);
             current_node->values.resize(mid_index);
-
-            key = new_node->keys.front(); // Promote the first key of the new node
         }
         else
         {
@@ -269,21 +274,14 @@ Doinsertion:
             key = current_node->keys[mid_index]; // Promote the middle key of the current node
             child_id = new_node->self_id; // Promote the new node's ID as the child ID for the parent
 
-            for (size_t i = mid_index + 1; i < current_node->keys.size(); i++)
-            {
-                new_node->keys.push_back(current_node->keys[i]);
-            }
-
-            for (size_t i = mid_index+1; i < current_node->children.size(); i++)
-            {
-                new_node->children.push_back(current_node->children[i]);
-            }
+            new_node->keys.assign(current_node->keys.begin() + mid_index + 1, current_node->keys.end());
+            new_node->children.assign(current_node->children.begin() + mid_index + 1, current_node->children.end());
             
             current_node->keys.resize(mid_index);
             current_node->children.resize(mid_index + 1); 
 
             new_node->high_key = current_node->high_key; 
-            current_node->high_key = new_node->keys.size() > 0 ? std::make_optional(new_node->keys.front()) : key;
+            current_node->high_key = key;
         }
         
         new_node->right_link = current_node->right_link;

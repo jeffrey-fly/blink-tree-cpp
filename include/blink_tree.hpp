@@ -64,3 +64,5 @@ SearchResult BLinkTree_Search(Key key);
 * @return: true if the insertion is successful, false if the key already exists.
 */
 bool BLinkTree_Insert(Key key,Value value);
+
+void BlinkTree_Reset();
