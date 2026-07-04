@@ -190,11 +190,11 @@ BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key)
 
 bool BLinkTree_Insert(Key key, Value value)
 {
-#ifdef DEBUG
-    PrintBLinkTree(GetNodeById(g_root_id));
-    std::cout << std::endl;
-    std::cout << " ************ " << std::endl;   
-#endif
+// #ifdef DEBUG
+//     PrintBLinkTree(GetNodeById(g_root_id));
+//     std::cout << std::endl;
+//     std::cout << " ************ " << std::endl;   
+// #endif
     std::stack<BLinkNode*> node_stack;
     BLinkNode* current_node = GetNodeById(g_root_id);
     if (!current_node)
