@@ -20,16 +20,15 @@ the core contribution of the Lehman-Yao paper.
 - [x] Single-threaded insert with leaf and internal node splitting
 - [x] Search
 - [ ] Concurrent insert (in progress)
-- [ ] Delete
 
 ## Build
 
-​```bash
+```bash
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Debug
 make -j4
 ./blink_tree_test
-​```
+```
 
 ## Paper
 
