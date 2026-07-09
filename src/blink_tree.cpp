@@ -3,11 +3,15 @@
 #include <map>
 #include <stack>
 #include <iostream>
+#include <mutex>
 
 static size_t g_max_keys_per_node = 1;
 static std::atomic<uint64_t> g_next_node_id{0};
+static std::shared_mutex g_tree_latch; // Global latch for the BLink tree
 static std::map<NodeId, BLinkNodePtr> g_node_store; 
-static NodeId g_root_id = NULL_NODE;
+static std::atomic<NodeId> g_root_id{NULL_NODE};
+
+enum class LockMode { Shared, Exclusive };
 
 static NodeId GetNextNodeId()
 {
@@ -16,6 +20,7 @@ static NodeId GetNextNodeId()
 
 /*
 * search key in the BLink tree, return node id. maybe: node itself; right link; or child node id. 
+* note: shared lock must be held on the node before calling this function.
 */
 static NodeId ScanNode(Key key, BLinkNode* node)
 {
@@ -37,6 +42,9 @@ static NodeId ScanNode(Key key, BLinkNode* node)
         return node->children[index];
 }
 
+/**
+ * note: the caller must hold the appropriate lock on the current node before calling this function.
+ */
 static size_t FindInNode(Key key, BLinkNode* node)
 {
     auto it = std::lower_bound(node->keys.begin(), node->keys.end(), key);
@@ -47,14 +55,23 @@ static size_t FindInNode(Key key, BLinkNode* node)
     return static_cast<size_t>(-1); // Key not found
 }
 
-static BLinkNode* GetNodeById(NodeId node_id)
+static BLinkNode* GetNodeById(NodeId node_id, bool need_lock = true)
 {
+    if (need_lock)
+    {
+        g_tree_latch.lock_shared(); // Acquire shared lock for reading
+    }
+    BLinkNode* node = nullptr;
     auto it = g_node_store.find(node_id);
     if (it != g_node_store.end())
     {
-        return it->second.get();
+        node = it->second.get();
     }
-    return nullptr;
+    if (need_lock)
+    {
+        g_tree_latch.unlock_shared(); // Release shared lock after reading
+    }
+    return node;
 }
 
 static bool IsNodeSafeToInsert(BLinkNode* node)
@@ -131,11 +148,17 @@ static void PrintBLinkTree(BLinkNode* node, int level = 0)
             PrintBLinkTree(child_node, level + 1);
         }
     }
+    if (level == 0)
+    {
+        std::cout << std::endl;
+    }
+    
 }
 
 void BlinkTree_Reset()
 {
     g_next_node_id = 1;
+    std::unique_lock<std::shared_mutex> lock(g_tree_latch); // Acquire exclusive lock for resetting the tree
     g_node_store.clear();
     g_root_id = NULL_NODE;
 }
@@ -144,9 +167,31 @@ bool BLinkTree_Init(int max_keys_per_node)
 {
     g_max_keys_per_node = (max_keys_per_node <= 0) ? 4 : max_keys_per_node;
     g_next_node_id = 1;
+    std::unique_lock<std::shared_mutex> lock(g_tree_latch); // Acquire exclusive lock for initialization
     g_node_store.clear();
     g_root_id = NULL_NODE;
     return true;
+}
+
+BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key, LockMode mode)
+{
+    BLinkNode* old_node = NULL;
+    while (ScanNode(key, current_node) == current_node->right_link)
+    { 
+        old_node = current_node;
+        current_node = GetNodeById(current_node->right_link);
+        if (mode == LockMode::Exclusive)
+        {
+            current_node->latch.lock();
+            old_node->latch.unlock();
+        }
+        else
+        {
+            current_node->latch.lock_shared();
+            old_node->latch.unlock_shared();
+        }
+    }
+    return current_node;
 }
 
 SearchResult BLinkTree_Search(Key _key)  
@@ -157,17 +202,19 @@ SearchResult BLinkTree_Search(Key _key)
         return result; 
     }
     BLinkNode* current_node = GetNodeById(g_root_id);
-
+    current_node->latch.lock_shared(); // Lock the leaf node for reading
     while (!current_node->is_leaf) // Traverse right ordown to the leaf node
     {
         NodeId _id = ScanNode(_key, current_node);
+        if (_id != current_node->right_link) 
+        {
+            current_node->latch.unlock_shared(); // Unlock the parent node after moving down
+        }
         current_node = GetNodeById(_id);
+        current_node->latch.lock_shared(); // Lock the new node for reading
     }
 
-    while(ScanNode(_key, current_node) == current_node->right_link)
-    {
-        current_node = GetNodeById(current_node->right_link);
-    }
+    current_node = MoveRightIfNecessary(current_node, _key, LockMode::Shared);
 
     auto index = FindInNode(_key, current_node);
 
@@ -175,17 +222,9 @@ SearchResult BLinkTree_Search(Key _key)
     {
         result.entries.emplace_back(_key, current_node->values[index]); 
     }
+    current_node->latch.unlock_shared(); // Unlock the leaf node after reading
 
     return result;
-}
-
-BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key)
-{
-    while (ScanNode(key, current_node) == current_node->right_link)
-    {
-        current_node = GetNodeById(current_node->right_link);
-    }
-    return current_node;
 }
 
 bool BLinkTree_Insert(Key key, Value value)
@@ -199,16 +238,22 @@ bool BLinkTree_Insert(Key key, Value value)
     BLinkNode* current_node = GetNodeById(g_root_id);
     if (!current_node)
     {
-        BLinkNodePtr new_root = std::make_unique<BLinkNode>();
-        NodeId new_root_id = GetNextNodeId();
-        new_root->self_id = new_root_id;
-        new_root->is_leaf = true;
-        new_root->keys.push_back(key);
-        new_root->values.push_back(value);
-        g_node_store[new_root->self_id] = std::move(new_root);
-        g_root_id = new_root_id;  
-        return true;
+        std::unique_lock<std::shared_mutex> lock(g_tree_latch);
+        current_node = GetNodeById(g_root_id, false);
+        if (!current_node)
+        {
+            BLinkNodePtr new_root = std::make_unique<BLinkNode>();
+            NodeId new_root_id = GetNextNodeId();
+            new_root->self_id = new_root_id;
+            new_root->is_leaf = true;
+            new_root->keys.push_back(key);
+            new_root->values.push_back(value);
+            g_node_store[new_root->self_id] = std::move(new_root);
+            g_root_id = new_root_id;  
+            return true;
+        }
     }
+    current_node->latch.lock_shared(); // Lock the root node for insertion
     while (!current_node->is_leaf) // Traverse down to the leaf node
     {
         NodeId _id = ScanNode(key, current_node);
@@ -216,17 +261,22 @@ bool BLinkTree_Insert(Key key, Value value)
         {
             node_stack.push(current_node);
         }
-        current_node = GetNodeById(_id);
+        if (_id != current_node->self_id)
+        {
+            current_node->latch.unlock_shared(); // Unlock the parent node after moving down
+            current_node = GetNodeById(_id);
+            current_node->latch.lock_shared(); // Lock the new node for insertion
+        }
     }
+    current_node->latch.unlock_shared(); // Unlock the leaf node after moving down
+
+    current_node->latch.lock(); // Lock the leaf node for insertion
     
-    while(ScanNode(key, current_node) == current_node->right_link){ // Traverse right if the value is greater than the high key of the current node
-        current_node = GetNodeById(current_node->right_link);
-    }
-
+    current_node = MoveRightIfNecessary(current_node, key,LockMode::Exclusive);
     auto index = FindInNode(key, current_node);
-
     if (index != static_cast<size_t>(-1))
     {
+        current_node->latch.unlock(); // Unlock the leaf node after insertion
         return false; // Key already exists
     }
 
@@ -246,6 +296,7 @@ Doinsertion:
         {
             ret = InsertIntoInternal(current_node, key, child_id);
         }
+        current_node->latch.unlock(); // Unlock the node after insertion
         return ret;
     }
     else
@@ -283,11 +334,13 @@ Doinsertion:
             new_node->high_key = current_node->high_key; 
             current_node->high_key = key;
         }
-        
-        new_node->right_link = current_node->right_link;
-        current_node->right_link = new_node->self_id;
-        g_node_store[new_node->self_id] = std::move(new_node);
+        new_node->right_link.store(current_node->right_link.load());
 
+        NodeId new_node_id = new_node->self_id;
+        g_tree_latch.lock(); // Acquire exclusive lock for updating the node store
+        g_node_store[new_node_id] = std::move(new_node);
+        g_tree_latch.unlock(); // Release exclusive lock
+        current_node->right_link.store(new_node_id);
         BLinkNode* old_node = current_node;
         if (node_stack.empty()) 
         {
@@ -297,19 +350,39 @@ Doinsertion:
             new_root->is_leaf = false;
             new_root->keys.push_back(key);
             new_root->children.push_back(old_node->self_id);
+            g_tree_latch.lock(); // Acquire exclusive lock for updating the root
             new_root->children.push_back(g_node_store[old_node->right_link]->self_id);
+            g_tree_latch.unlock(); // Release exclusive lock
             new_root->high_key = std::nullopt; 
+            g_tree_latch.lock(); // Acquire exclusive lock for updating the root
             g_node_store[new_root->self_id] = std::move(new_root);
             g_root_id = new_root_id;  
+            g_tree_latch.unlock(); // Release exclusive lock
+            old_node->latch.unlock(); // Unlock the old node after insertion
             return true;
         } else
         {
             current_node = node_stack.top();
             node_stack.pop();
         }
-        current_node = MoveRightIfNecessary(current_node, key);
+        current_node->latch.lock(); // Lock the parent node for insertion
+        current_node = MoveRightIfNecessary(current_node, key, LockMode::Exclusive);
+        old_node->latch.unlock(); // Unlock the old node after insertion
         goto Doinsertion;
     }
 
     return true;
+}
+
+void BLinkTree_Print()
+{
+    BLinkNode* root_node = GetNodeById(g_root_id);
+    if (root_node)
+    {
+        PrintBLinkTree(root_node);
+    }
+    else
+    {
+        std::cout << "BLink tree is empty." << std::endl;
+    }
 }

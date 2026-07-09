@@ -34,7 +34,7 @@ struct BLinkNode {
     std::vector<Key> keys;          // The keys stored in this node
     std::vector<NodeId> children;   // The child node IDs corresponding to the keys
     std::vector<Value> values;      // The values associated with the keys (only used in leaf nodes) 
-    NodeId right_link = NULL_NODE;  // The ID of the right sibling node (used for linking leaf nodes)
+    std::atomic<NodeId> right_link{NULL_NODE};  // The ID of the right sibling node
     std::optional<Key> high_key;    // The highest key in this node (used for determining the range of keys covered by this node)
 
     std::shared_mutex latch;        // A shared mutex for synchronizing access to this node        
@@ -66,3 +66,5 @@ SearchResult BLinkTree_Search(Key key);
 bool BLinkTree_Insert(Key key,Value value);
 
 void BlinkTree_Reset();
+
+void BLinkTree_Print();
