@@ -206,10 +206,10 @@ SearchResult BLinkTree_Search(Key _key)
     while (!current_node->is_leaf) // Traverse right ordown to the leaf node
     {
         NodeId _id = ScanNode(_key, current_node);
-        if (_id != current_node->right_link) 
-        {
+        // if (_id != current_node->right_link) 
+        // {
             current_node->latch.unlock_shared(); // Unlock the parent node after moving down
-        }
+        // }
         current_node = GetNodeById(_id);
         current_node->latch.lock_shared(); // Lock the new node for reading
     }
@@ -235,6 +235,7 @@ bool BLinkTree_Insert(Key key, Value value)
 //     std::cout << " ************ " << std::endl;   
 // #endif
     std::stack<BLinkNode*> node_stack;
+    NodeId old_root_id = g_root_id;
     BLinkNode* current_node = GetNodeById(g_root_id);
     if (!current_node)
     {
@@ -317,6 +318,9 @@ Doinsertion:
 
             current_node->keys.resize(mid_index);
             current_node->values.resize(mid_index);
+
+            new_node->high_key = current_node->high_key;
+            current_node->high_key = key;
         }
         else
         {
@@ -344,23 +348,62 @@ Doinsertion:
         BLinkNode* old_node = current_node;
         if (node_stack.empty()) 
         {
-            BLinkNodePtr new_root = std::make_unique<BLinkNode>();
-            NodeId new_root_id = GetNextNodeId();
-            new_root->self_id = new_root_id;
-            new_root->is_leaf = false;
-            new_root->keys.push_back(key);
-            new_root->children.push_back(old_node->self_id);
-            g_tree_latch.lock(); // Acquire exclusive lock for updating the root
-            new_root->children.push_back(g_node_store[old_node->right_link]->self_id);
-            g_tree_latch.unlock(); // Release exclusive lock
-            new_root->high_key = std::nullopt; 
-            g_tree_latch.lock(); // Acquire exclusive lock for updating the root
-            g_node_store[new_root->self_id] = std::move(new_root);
-            g_root_id = new_root_id;  
-            g_tree_latch.unlock(); // Release exclusive lock
-            old_node->latch.unlock(); // Unlock the old node after insertion
-            return true;
-        } else
+            if (old_root_id != g_root_id) {
+                old_root_id = g_root_id;
+                BLinkNode* new_node1 = GetNodeById(g_root_id, false);
+                new_node1->latch.lock_shared(); // Lock the new root node for insertion
+                while (true)
+                {
+                    Key find_key = old_node->keys.front();
+                    NodeId _id = ScanNode(find_key, new_node1);
+
+                    if (_id != new_node1->right_link)
+                    {
+                        node_stack.push(new_node1); // 只有真正下降的路径才算祖先,push 进 stack
+                    }
+
+                    if (_id == old_node->self_id)
+                    {
+                        // new_node 就是我们要找的真正父节点,已经在上面 push 过了
+                        break;
+                    }
+
+                    if (_id != new_node1->self_id)
+                    {
+                        new_node1->latch.unlock_shared();
+                        new_node1 = GetNodeById(_id, false);
+                        new_node1->latch.lock_shared();
+                    }
+                }
+                new_node1->latch.unlock_shared(); // Unlock the leaf node after moving down
+                
+                current_node = node_stack.top();
+                node_stack.pop();
+            }
+            else
+            {
+                BLinkNodePtr new_root = std::make_unique<BLinkNode>();
+                NodeId new_root_id = GetNextNodeId();
+                new_root->self_id = new_root_id;
+                new_root->is_leaf = false;
+                new_root->keys.push_back(key);
+                new_root->children.push_back(old_node->self_id);
+                g_tree_latch.lock(); // Acquire exclusive lock for updating the root
+                new_root->children.push_back(g_node_store[old_node->right_link]->self_id);
+                g_tree_latch.unlock(); // Release exclusive lock
+                new_root->high_key = std::nullopt; 
+
+                g_tree_latch.lock(); // Acquire exclusive lock for updating the root
+                g_node_store[new_root->self_id] = std::move(new_root);
+                g_tree_latch.unlock(); // Release exclusive lock
+
+                NodeId expected = old_root_id;
+                g_root_id.compare_exchange_strong(expected, new_root_id, std::memory_order_acq_rel);
+                old_node->latch.unlock(); // Unlock the old node after insertion
+                return true;
+            }
+        } 
+        else
         {
             current_node = node_stack.top();
             node_stack.pop();

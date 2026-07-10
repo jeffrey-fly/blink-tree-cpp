@@ -378,6 +378,9 @@ static void RunAllConcurrentTestsForMaxKeys(size_t max_keys)
     TestConcurrentInterleaved(/*num_threads=*/4, /*n=*/200);
     TestConcurrentReadWrite(/*num_writer_threads=*/4, /*num_reader_threads=*/4, /*n=*/200);
 
+    // TestConcurrentDisjointRanges(1, 100);
+    // TestConcurrentDisjointShuffled(1, 100, /*seed=*/42);
+
     std::cout << "  all concurrent tests passed for max_keys_per_node=" << max_keys
                << std::endl << std::endl;
 }
