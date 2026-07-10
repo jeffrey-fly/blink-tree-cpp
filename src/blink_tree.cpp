@@ -7,7 +7,7 @@
 
 static size_t g_max_keys_per_node = 1;
 static std::atomic<uint64_t> g_next_node_id{0};
-static std::shared_mutex g_tree_latch; // Global latch for the BLink tree
+static std::shared_mutex g_tree_latch; 
 static std::map<NodeId, BLinkNodePtr> g_node_store; 
 static std::atomic<NodeId> g_root_id{NULL_NODE};
 
@@ -117,6 +117,27 @@ static bool InsertIntoInternal(BLinkNode* node, Key key, NodeId child_id)
     return true;
 }
 
+static BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key, LockMode mode)
+{
+    BLinkNode* old_node = NULL;
+    while (ScanNode(key, current_node) == current_node->right_link)
+    { 
+        old_node = current_node;
+        current_node = GetNodeById(current_node->right_link);
+        if (mode == LockMode::Exclusive)
+        {
+            current_node->latch.lock();
+            old_node->latch.unlock();
+        }
+        else
+        {
+            current_node->latch.lock_shared();
+            old_node->latch.unlock_shared();
+        }
+    }
+    return current_node;
+}
+
 static void PrintBLinkTree(BLinkNode* node, int level = 0)
 {
     if (!node) return;
@@ -155,6 +176,19 @@ static void PrintBLinkTree(BLinkNode* node, int level = 0)
     
 }
 
+void BLinkTree_Print()
+{
+    BLinkNode* root_node = GetNodeById(g_root_id);
+    if (root_node)
+    {
+        PrintBLinkTree(root_node);
+    }
+    else
+    {
+        std::cout << "BLink tree is empty." << std::endl;
+    }
+}
+
 void BlinkTree_Reset()
 {
     g_next_node_id = 1;
@@ -173,27 +207,6 @@ bool BLinkTree_Init(int max_keys_per_node)
     return true;
 }
 
-BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key, LockMode mode)
-{
-    BLinkNode* old_node = NULL;
-    while (ScanNode(key, current_node) == current_node->right_link)
-    { 
-        old_node = current_node;
-        current_node = GetNodeById(current_node->right_link);
-        if (mode == LockMode::Exclusive)
-        {
-            current_node->latch.lock();
-            old_node->latch.unlock();
-        }
-        else
-        {
-            current_node->latch.lock_shared();
-            old_node->latch.unlock_shared();
-        }
-    }
-    return current_node;
-}
-
 SearchResult BLinkTree_Search(Key _key)  
 {
     SearchResult result;
@@ -206,10 +219,7 @@ SearchResult BLinkTree_Search(Key _key)
     while (!current_node->is_leaf) // Traverse right ordown to the leaf node
     {
         NodeId _id = ScanNode(_key, current_node);
-        // if (_id != current_node->right_link) 
-        // {
-            current_node->latch.unlock_shared(); // Unlock the parent node after moving down
-        // }
+        current_node->latch.unlock_shared(); // Unlock the parent node after moving down
         current_node = GetNodeById(_id);
         current_node->latch.lock_shared(); // Lock the new node for reading
     }
@@ -229,11 +239,6 @@ SearchResult BLinkTree_Search(Key _key)
 
 bool BLinkTree_Insert(Key key, Value value)
 {
-// #ifdef DEBUG
-//     PrintBLinkTree(GetNodeById(g_root_id));
-//     std::cout << std::endl;
-//     std::cout << " ************ " << std::endl;   
-// #endif
     std::stack<BLinkNode*> node_stack;
     NodeId old_root_id = g_root_id;
     BLinkNode* current_node = GetNodeById(g_root_id);
@@ -359,12 +364,11 @@ Doinsertion:
 
                     if (_id != new_node1->right_link)
                     {
-                        node_stack.push(new_node1); // 只有真正下降的路径才算祖先,push 进 stack
+                        node_stack.push(new_node1); 
                     }
 
                     if (_id == old_node->self_id)
                     {
-                        // new_node 就是我们要找的真正父节点,已经在上面 push 过了
                         break;
                     }
 
@@ -415,17 +419,4 @@ Doinsertion:
     }
 
     return true;
-}
-
-void BLinkTree_Print()
-{
-    BLinkNode* root_node = GetNodeById(g_root_id);
-    if (root_node)
-    {
-        PrintBLinkTree(root_node);
-    }
-    else
-    {
-        std::cout << "BLink tree is empty." << std::endl;
-    }
 }

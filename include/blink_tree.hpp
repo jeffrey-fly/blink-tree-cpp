@@ -28,17 +28,14 @@ struct SearchResult {
  *  - children has one more element than keys, i.e., children.size() == keys.size() + 1
  */
 struct BLinkNode {
-    bool is_leaf;                   // Indicates whether the node is a leaf node or an internal node
-    NodeId self_id;                 // The unique identifier for this node
-
-    std::vector<Key> keys;          // The keys stored in this node
-    std::vector<NodeId> children;   // The child node IDs corresponding to the keys
-    std::vector<Value> values;      // The values associated with the keys (only used in leaf nodes) 
+    bool is_leaf;                               // Indicates whether the node is a leaf node or an internal node
+    NodeId self_id;                             // The unique identifier for this node
+    std::vector<Key> keys;                      // The keys stored in this node
+    std::vector<NodeId> children;               // The child node IDs corresponding to the keys
+    std::vector<Value> values;                  // The values associated with the keys (only used in leaf nodes) 
     std::atomic<NodeId> right_link{NULL_NODE};  // The ID of the right sibling node
-    std::optional<Key> high_key;    // The highest key in this node (used for determining the range of keys covered by this node)
-
-    std::shared_mutex latch;        // A shared mutex for synchronizing access to this node        
-    std::atomic<uint64_t> version{0}; // A version number for optimistic concurrency control
+    std::optional<Key> high_key;                // The highest key in this node (used for determining the range of keys covered by this node)
+    std::shared_mutex latch;                    // A shared mutex for synchronizing access to this node        
 };
 
 using BLinkNodePtr = std::unique_ptr<BLinkNode>;
@@ -65,6 +62,13 @@ SearchResult BLinkTree_Search(Key key);
 */
 bool BLinkTree_Insert(Key key,Value value);
 
+/*
+* Reset the BLink tree, clearing all nodes and resetting the root.
+* This function is useful for testing and reinitializing the tree.
+*/
 void BlinkTree_Reset();
 
+/**
+ * Print the entire BLink tree in a hierarchical format.
+ */
 void BLinkTree_Print();
