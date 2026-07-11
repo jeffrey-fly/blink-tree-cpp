@@ -18,7 +18,14 @@ the core contribution of the Lehman-Yao paper.
 ## Current Status
 
 - [x] Search
-- [x] Concurrent insert (in progress)
+- [x] Concurrent insert
+  - Covered by a dedicated concurrency test suite
+  - Clean under ThreadSanitizer (TSAN) and AddressSanitizer (ASAN)
+- [ ] Range scan
+- [ ] Delete — the original paper does not propose node merging for
+      deletion (rebalancing would add significant complexity for
+      limited benefit); a merge-free deletion strategy is TBD
+
 
 ## Build
 
@@ -27,6 +34,27 @@ mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Debug
 make -j4
 ./blink_tree_test
+```
+
+## Testing
+
+Concurrency correctness is checked under both sanitizers (mutually exclusive):
+
+```bash
+# ThreadSanitizer
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DTSAN=ON
+make -j4 && ./blink_tree_test
+
+# AddressSanitizer
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DASAN=ON
+make -j4 && ./blink_tree_test
+```
+
+The test binary also supports:
+
+```bash
+./blink_tree_test --concurrent-only   # skip single-threaded tests
+./blink_tree_test --no-concurrent     # skip concurrent tests (faster iteration)
 ```
 
 ## Paper
