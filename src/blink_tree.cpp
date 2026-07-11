@@ -241,7 +241,7 @@ bool BLinkTree_Insert(Key key, Value value)
 {
     std::stack<BLinkNode*> node_stack;
     NodeId old_root_id = g_root_id;
-    BLinkNode* current_node = GetNodeById(g_root_id);
+    BLinkNode* current_node = GetNodeById(old_root_id);
     if (!current_node)
     {
         std::unique_lock<std::shared_mutex> lock(g_tree_latch);
@@ -356,7 +356,7 @@ Doinsertion:
         {
             if (old_root_id != g_root_id) {
                 old_root_id = g_root_id;
-                BLinkNode* new_node1 = GetNodeById(g_root_id, false);
+                BLinkNode* new_node1 = GetNodeById(old_root_id);
                 new_node1->latch.lock_shared(); 
                 while (true)
                 {
@@ -376,7 +376,7 @@ Doinsertion:
                     if (_id != new_node1->self_id)
                     {
                         new_node1->latch.unlock_shared();
-                        new_node1 = GetNodeById(_id, false);
+                        new_node1 = GetNodeById(_id);
                         new_node1->latch.lock_shared();
                     }
                 }
@@ -400,10 +400,9 @@ Doinsertion:
 
                 g_tree_latch.lock(); 
                 g_node_store[new_root->self_id] = std::move(new_root);
-                g_tree_latch.unlock(); 
-
                 NodeId expected = old_root_id;
                 g_root_id.compare_exchange_strong(expected, new_root_id, std::memory_order_acq_rel);
+                g_tree_latch.unlock(); 
                 old_node->latch.unlock(); 
                 return true;
             }
