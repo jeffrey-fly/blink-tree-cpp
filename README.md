@@ -17,9 +17,8 @@ the core contribution of the Lehman-Yao paper.
 
 ## Current Status
 
-- [x] Single-threaded insert with leaf and internal node splitting
 - [x] Search
-- [ ] Concurrent insert (in progress)
+- [x] Concurrent insert (in progress)
 
 ## Build
 
