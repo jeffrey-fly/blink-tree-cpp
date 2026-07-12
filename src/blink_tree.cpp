@@ -4,6 +4,7 @@
 #include <stack>
 #include <iostream>
 #include <mutex>
+#include <assert.h>
 
 static size_t g_max_keys_per_node = 1;
 static std::atomic<uint64_t> g_next_node_id{0};
@@ -95,7 +96,7 @@ static bool InsertIntoLeaf(BLinkNode* node, Key key, std::optional<Value> value)
     }
 
     node->keys.insert(it, key);
-    if (node->is_leaf && value.has_value())
+    if (value.has_value())
     {
         node->values.insert(node->values.begin() + index, value.value());
     }
@@ -111,7 +112,7 @@ static bool InsertIntoInternal(BLinkNode* node, Key key, NodeId child_id)
     {
         return false; 
     }
-
+    assert(child_id != NULL_NODE);
     node->keys.insert(it, key);
     node->children.insert(node->children.begin() + index + 1, child_id);
     return true;
@@ -124,6 +125,7 @@ static BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key, LockMod
     { 
         old_node = current_node;
         current_node = GetNodeById(current_node->right_link);
+        assert(current_node != nullptr);
         if (mode == LockMode::Exclusive)
         {
             current_node->latch.lock();
@@ -189,7 +191,7 @@ void BLinkTree_Print()
     }
 }
 
-void BlinkTree_Reset()
+void BLinkTree_Reset()
 {
     g_next_node_id = 1;
     std::unique_lock<std::shared_mutex> lock(g_tree_latch);
@@ -275,8 +277,32 @@ bool BLinkTree_Insert(Key key, Value value)
             current_node->latch.lock_shared(); 
         }
     }
+    /*
+    Lock-coupling would let us upgrade shared->exclusive atomically, but we
+    deliberately avoid that here: fully releasing the shared latch before
+    acquiring the exclusive one keeps the locking scheme simple and avoids
+    upgrade deadlocks (two readers both waiting on each other to drop their
+    shared latch before they can escalate).
+    
+    The cost is a window between unlock_shared() and lock() during which
+    this node is completely unprotected. Another thread can split it in
+    that window, moving some of our target key's range off to a new right
+    sibling and updating this node's high_key accordingly.
+    
+    This is exactly the race the Lehman-Yao B-link design tolerates by
+    construction: every node carries a high_key and a right_link, so once
+    we hold the exclusive latch we re-validate with MoveRightIfNecessary()
+    instead of trusting the node we arrived at during the shared-latch
+    descent. If key > high_key, we know a concurrent split moved our range
+    rightward, and we follow right_link (looping, since more than one split
+    could have happened in the window) until we land on the node that
+    actually covers `key`. Only then is it safe to search/modify in place.
+    
+    In short: we never rely on the node reference staying "correct" across
+    the unlock/lock gap. We rely on high_key + right_link to detect and
+    correct for whatever changed while we didn't hold any latch.
+    */
     current_node->latch.unlock_shared(); 
-
     current_node->latch.lock(); 
     
     current_node = MoveRightIfNecessary(current_node, key,LockMode::Exclusive);

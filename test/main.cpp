@@ -60,7 +60,7 @@ static void VerifyAll(const std::vector<Key>& should_exist,
 
 static void TestAscending()
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
     InsertAll({1, 2, 3, 4, 5, 6, 7});
     VerifyAll(/*should_exist=*/{1, 2, 3, 4, 5, 6, 7},
               /*should_not_exist=*/{8});
@@ -69,7 +69,7 @@ static void TestAscending()
 
 static void TestDescending()
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
     InsertAll({7, 6, 5, 4, 3, 2, 1});
     VerifyAll({1, 2, 3, 4, 5, 6, 7}, {8});
     std::cout << "  [OK] TestDescending" << std::endl;
@@ -77,7 +77,7 @@ static void TestDescending()
 
 static void TestRandomOrder()
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
     InsertAll({4, 1, 7, 2, 6, 3, 5});
     VerifyAll({1, 2, 3, 4, 5, 6, 7}, {8});
     std::cout << "  [OK] TestRandomOrder" << std::endl;
@@ -89,7 +89,7 @@ static void TestRandomOrder()
 // possibly multiple root splits), not just a single split.
 static void TestDenseSequential(size_t n)
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
     std::vector<Key> keys;
     for (Key k = 1; k <= static_cast<Key>(n); ++k) keys.push_back(k);
     InsertAll(keys);
@@ -102,7 +102,7 @@ static void TestDenseSequential(size_t n)
 // not a new random shuffle that might not reproduce the bug.
 static void TestShuffled(size_t n, unsigned seed)
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
     std::vector<Key> keys;
     for (Key k = 1; k <= static_cast<Key>(n); ++k) keys.push_back(k);
 
@@ -122,7 +122,7 @@ static void TestShuffled(size_t n, unsigned seed)
 // the CHECK below to match whatever behavior you've decided is correct.
 static void TestDuplicateInsert()
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
     InsertAll({1, 2, 3});
     // TODO: replace with your real insert call, capture return value
     bool inserted_again = BLinkTree_Insert(2, 999);
@@ -154,7 +154,7 @@ static void TestDuplicateInsert()
 // siblings during split propagation.
 static void TestConcurrentDisjointRanges(size_t num_threads, size_t keys_per_thread)
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
 
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
@@ -186,7 +186,7 @@ static void TestConcurrentDisjointRanges(size_t num_threads, size_t keys_per_thr
 // randomized while still avoiding cross-thread key collisions.
 static void TestConcurrentDisjointShuffled(size_t num_threads, size_t keys_per_thread, unsigned seed)
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
 
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
@@ -230,7 +230,7 @@ static void TestConcurrentDisjointShuffled(size_t num_threads, size_t keys_per_t
 // than contiguous ranges, since it maximizes same-node contention.
 static void TestConcurrentInterleaved(size_t num_threads, size_t n)
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
 
     std::vector<std::vector<Key>> per_thread_keys(num_threads);
     for (Key k = 1; k <= static_cast<Key>(n); ++k)
@@ -266,7 +266,7 @@ static void TestConcurrentInterleaved(size_t num_threads, size_t n)
 // or return a wrong value for a key that IS present.
 static void TestConcurrentReadWrite(size_t num_writer_threads, size_t num_reader_threads, size_t n)
 {
-    BlinkTree_Reset();
+    BLinkTree_Reset();
 
     std::atomic<bool> stop_readers{false};
     std::atomic<size_t> reader_iterations{0};

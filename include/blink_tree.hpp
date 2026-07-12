@@ -65,8 +65,9 @@ bool BLinkTree_Insert(Key key,Value value);
 /*
 * Reset the BLink tree, clearing all nodes and resetting the root.
 * This function is useful for testing and reinitializing the tree.
+* This function is not is not thread-safe (only callable at quiescence)
 */
-void BlinkTree_Reset();
+void BLinkTree_Reset();
 
 /**
  * Print the entire BLink tree in a hierarchical format.
