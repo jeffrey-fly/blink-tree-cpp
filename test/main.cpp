@@ -416,6 +416,8 @@ int main(int argc, char** argv)
         TestConcurrentStress(/*repetitions=*/3);
     }
 
+    BLinkTree_Print();     
+
     std::cout << "ALL TESTS PASSED" << std::endl;
     return 0;
 }

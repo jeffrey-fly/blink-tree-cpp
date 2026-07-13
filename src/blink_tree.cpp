@@ -25,7 +25,7 @@ static NodeId GetNextNodeId()
 */
 static NodeId ScanNode(Key key, BLinkNode* node)
 {
-    if(node->right_link != NULL_NODE && node->high_key.has_value() && key >= node->high_key.value())
+    if(node->right_link != NULL_NODE && node->high_key.has_value() && key > node->high_key.value())
     {
         return node->right_link; // Traverse to the right sibling if the key is greater than the high key
     }
@@ -37,10 +37,7 @@ static NodeId ScanNode(Key key, BLinkNode* node)
 
     auto it = std::lower_bound(node->keys.begin(), node->keys.end(), key);
     size_t index = std::distance(node->keys.begin(), it);
-    if (it != node->keys.end() && *it == key)
-        return node->children[index + 1];
-    else
-        return node->children[index];
+    return node->children[index];
 }
 
 /**
@@ -344,14 +341,14 @@ Doinsertion:
             size_t mid_index = current_node->keys.size() / 2;
             new_node->keys.assign(current_node->keys.begin() + mid_index, current_node->keys.end());
             new_node->values.assign(current_node->values.begin() + mid_index, current_node->values.end());
-            key = current_node->keys[mid_index];
+            key = current_node->keys[mid_index - 1];
 
             child_id = new_node->self_id;
 
             current_node->keys.resize(mid_index);
             current_node->values.resize(mid_index);
 
-            new_node->high_key = current_node->high_key;
+            new_node->high_key = new_node->keys.back();
             current_node->high_key = key;
         }
         else
@@ -366,7 +363,6 @@ Doinsertion:
             
             current_node->keys.resize(mid_index);
             current_node->children.resize(mid_index + 1); 
-
             new_node->high_key = current_node->high_key; 
             current_node->high_key = key;
         }
