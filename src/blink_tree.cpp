@@ -97,6 +97,10 @@ static bool InsertIntoLeaf(BLinkNode* node, Key key, std::optional<Value> value)
     {
         node->values.insert(node->values.begin() + index, value.value());
     }
+    if (!node->high_key.has_value() || key > node->high_key.value())
+    {
+        node->high_key = key;
+    }
     return true;
 }
 
@@ -253,6 +257,7 @@ bool BLinkTree_Insert(Key key, Value value)
             new_root->is_leaf = true;
             new_root->keys.push_back(key);
             new_root->values.push_back(value);
+            new_root->high_key = key;
             g_node_store[new_root->self_id] = std::move(new_root);
             g_root_id = new_root_id;  
             return true;

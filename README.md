@@ -17,7 +17,7 @@ the core contribution of the Lehman-Yao paper.
 
 ## Current Status
 
-- [x] Search
+- [x] Point search
 - [x] Concurrent insert
   - Covered by a dedicated concurrency test suite
   - Clean under ThreadSanitizer (TSAN) and AddressSanitizer (ASAN)
@@ -69,4 +69,4 @@ Efficient locking for concurrent operations on B-trees.
 |----------|--------|
 | `NodeId` instead of raw pointer | Simulates page-id based buffer pool; easier to extend to disk storage |
 | `unique_ptr` in NodeStore | Clear ownership; nodes never move in memory (mutex non-movable) |
-| `high_key` as strict upper bound | Matches paper's definition; simplifies `move_right` condition |
+| `high_key` as inclusive maximum key | `move_right` follows `right_link` when the target key is greater than this maximum |

@@ -48,9 +48,9 @@ using BLinkNodePtr = std::unique_ptr<BLinkNode>;
 bool BLinkTree_Init(int max_keys_per_node);
 
 /*
-* Search for entries in the BLink tree within the specified key range.
+* Search for one key in the BLink tree.
 * @param key: The key to search for in the BLink tree.
-* @return: A SearchResult containing the entries found within the range.  
+* @return: A SearchResult containing the matching entry, or no entries if the key is absent.  
 */
 SearchResult BLinkTree_Search(Key key);  
 

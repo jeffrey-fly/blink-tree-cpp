@@ -8,6 +8,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <sstream>
 
 #include "blink_tree.hpp"
 
@@ -124,11 +125,36 @@ static void TestDuplicateInsert()
 {
     BLinkTree_Reset();
     InsertAll({1, 2, 3});
-    // TODO: replace with your real insert call, capture return value
     bool inserted_again = BLinkTree_Insert(2, 999);
     CHECK(!inserted_again, "duplicate insert should return false");
     VerifyAll({1, 2, 3}, {4});
     std::cout << "  [OK] TestDuplicateInsert" << std::endl;
+}
+
+static std::string CaptureTreePrint()
+{
+    std::ostringstream output;
+    std::streambuf* old_buf = std::cout.rdbuf(output.rdbuf());
+    BLinkTree_Print();
+    std::cout.rdbuf(old_buf);
+    return output.str();
+}
+
+static void TestHighKeyTracksRightmostLeafAppend()
+{
+    BLinkTree_Init(4);
+    InsertAll({1, 2, 3, 4, 5});
+
+    bool inserted = BLinkTree_Insert(6, 600);
+    CHECK(inserted, "expected append into rightmost leaf to succeed");
+
+    std::string printed = CaptureTreePrint();
+    CHECK(printed.find("Keys: 3 4 5 6") != std::string::npos,
+          "expected rightmost leaf to contain appended key 6");
+    CHECK(printed.find("Keys: 3 4 5 6 , Is Leaf: 1, High Key: 6") != std::string::npos,
+          "rightmost leaf high_key should track appended maximum key");
+
+    std::cout << "  [OK] TestHighKeyTracksRightmostLeafAppend" << std::endl;
 }
 
 // ---------------------------------------------------------------------------
@@ -360,6 +386,7 @@ static void RunAllTestsForMaxKeys(size_t max_keys)
     TestShuffled(20, /*seed=*/12345);
     TestShuffled(50, /*seed=*/67890);
     TestDuplicateInsert();
+    TestHighKeyTracksRightmostLeafAppend();
 
     std::cout << "  all passed for max_keys_per_node=" << max_keys << std::endl << std::endl;
 }
