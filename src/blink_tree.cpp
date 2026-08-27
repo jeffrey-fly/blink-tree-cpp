@@ -8,7 +8,7 @@
 
 static size_t g_max_keys_per_node = 1;
 static std::atomic<uint64_t> g_next_node_id{0};
-static std::shared_mutex g_tree_latch; 
+static std::shared_mutex g_node_store_latch; // Protects g_node_store membership, not node contents. 
 static std::map<NodeId, BLinkNodePtr> g_node_store; 
 static std::atomic<NodeId> g_root_id{NULL_NODE};
 
@@ -57,7 +57,7 @@ static BLinkNode* GetNodeById(NodeId node_id, bool need_lock = true)
 {
     if (need_lock)
     {
-        g_tree_latch.lock_shared(); 
+        g_node_store_latch.lock_shared(); 
     }
     BLinkNode* node = nullptr;
     auto it = g_node_store.find(node_id);
@@ -67,7 +67,7 @@ static BLinkNode* GetNodeById(NodeId node_id, bool need_lock = true)
     }
     if (need_lock)
     {
-        g_tree_latch.unlock_shared(); 
+        g_node_store_latch.unlock_shared(); 
     }
     return node;
 }
@@ -195,7 +195,7 @@ void BLinkTree_Print()
 void BLinkTree_Reset()
 {
     g_next_node_id = 1;
-    std::unique_lock<std::shared_mutex> lock(g_tree_latch);
+    std::unique_lock<std::shared_mutex> lock(g_node_store_latch);
     g_node_store.clear();
     g_root_id = NULL_NODE;
 }
@@ -204,7 +204,7 @@ bool BLinkTree_Init(int max_keys_per_node)
 {
     g_max_keys_per_node = (max_keys_per_node <= 0) ? 4 : max_keys_per_node;
     g_next_node_id = 1;
-    std::unique_lock<std::shared_mutex> lock(g_tree_latch); 
+    std::unique_lock<std::shared_mutex> lock(g_node_store_latch); 
     g_node_store.clear();
     g_root_id = NULL_NODE;
     return true;
@@ -247,7 +247,7 @@ bool BLinkTree_Insert(Key key, Value value)
     BLinkNode* current_node = GetNodeById(old_root_id);
     if (!current_node)
     {
-        std::unique_lock<std::shared_mutex> lock(g_tree_latch);
+        std::unique_lock<std::shared_mutex> lock(g_node_store_latch);
         current_node = GetNodeById(g_root_id, false);
         if (!current_node)
         {
@@ -374,9 +374,10 @@ Doinsertion:
         new_node->right_link.store(current_node->right_link.load());
 
         NodeId new_node_id = new_node->self_id;
-        g_tree_latch.lock(); 
-        g_node_store[new_node_id] = std::move(new_node);
-        g_tree_latch.unlock(); // Release exclusive lock
+        {
+            std::unique_lock<std::shared_mutex> lock(g_node_store_latch);
+            g_node_store[new_node_id] = std::move(new_node);
+        }
         current_node->right_link.store(new_node_id);
         BLinkNode* old_node = current_node;
         if (node_stack.empty()) 
@@ -420,16 +421,15 @@ Doinsertion:
                 new_root->is_leaf = false;
                 new_root->keys.push_back(key);
                 new_root->children.push_back(old_node->self_id);
-                g_tree_latch.lock(); 
-                new_root->children.push_back(g_node_store[old_node->right_link]->self_id);
-                g_tree_latch.unlock(); 
+                new_root->children.push_back(new_node_id);
                 new_root->high_key = std::nullopt; 
 
-                g_tree_latch.lock(); 
-                g_node_store[new_root->self_id] = std::move(new_root);
-                NodeId expected = old_root_id;
-                g_root_id.compare_exchange_strong(expected, new_root_id, std::memory_order_acq_rel);
-                g_tree_latch.unlock(); 
+                {
+                    std::unique_lock<std::shared_mutex> lock(g_node_store_latch);
+                    g_node_store[new_root->self_id] = std::move(new_root);
+                    NodeId expected = old_root_id;
+                    g_root_id.compare_exchange_strong(expected, new_root_id, std::memory_order_acq_rel);
+                } 
                 old_node->latch.unlock(); 
                 return true;
             }
