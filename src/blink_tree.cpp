@@ -141,6 +141,8 @@ static BLinkNode* MoveRightIfNecessary(BLinkNode* current_node, Key key, LockMod
     return current_node;
 }
 
+// Caller must ensure no other thread is accessing the tree while printing.
+// This recursive traversal does not acquire node latches.
 static void PrintBLinkTree(BLinkNode* node, int level = 0)
 {
     if (!node) return;
@@ -179,6 +181,7 @@ static void PrintBLinkTree(BLinkNode* node, int level = 0)
     
 }
 
+// Single-threaded diagnostic only: call when all tree operations are quiescent.
 void BLinkTree_Print()
 {
     BLinkNode* root_node = GetNodeById(g_root_id);

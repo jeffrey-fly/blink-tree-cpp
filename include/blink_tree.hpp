@@ -71,5 +71,6 @@ void BLinkTree_Reset();
 
 /**
  * Print the entire BLink tree in a hierarchical format.
+ * Not thread-safe: call only when no other thread is accessing the tree.
  */
 void BLinkTree_Print();

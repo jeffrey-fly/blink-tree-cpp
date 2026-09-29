@@ -17,15 +17,13 @@ the core contribution of the Lehman-Yao paper.
 
 ## Current Status
 
-- [x] Point search
-- [x] Concurrent insert
-  - Covered by a dedicated concurrency test suite
-  - Clean under ThreadSanitizer (TSAN) and AddressSanitizer (ASAN)
-- [ ] Range scan
-- [ ] Delete — the original paper does not propose node merging for
-      deletion (rebalancing would add significant complexity for
-      limited benefit); a merge-free deletion strategy is TBD
+This learning project is complete for its current scope: point search and
+concurrent insertion. The test suite covers sequential and concurrent use and
+can be run with ThreadSanitizer (TSAN) or AddressSanitizer (ASAN).
 
+Range scans and deletion are outside the current scope. No further features
+are planned at present. `BLinkTree_Print()` is a diagnostic helper and should
+only be called when no other thread is accessing the tree.
 
 ## Build
 
